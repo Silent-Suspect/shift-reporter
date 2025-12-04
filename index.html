@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Report Generator</title>
+    <title>Zeitzettel Generator</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
     <style>
@@ -96,7 +96,6 @@
 
     <script>
         // --- KONFIGURATION ---
-        // Fügen Sie hier die URL Ihres NEUEN "Reader" Web Apps Scripts ein:
         const API_URL = "https://script.google.com/macros/s/AKfycbxpMRFvRHGDeDGLtKu6Q8lHAXnd75Mq4Je3gpZTY30dyIUFBhUq7ecqs7yjp7Qw3iVM/exec"; 
         // ---------------------
 
@@ -209,7 +208,9 @@
 
             const name = document.getElementById('employee-name').value;
             const address = document.getElementById('employee-address').value;
-            const range = `${new Date(document.getElementById('date-start').value).toLocaleDateString()} - ${new Date(document.getElementById('date-end').value).toLocaleDateString()}`;
+            const sDate = new Date(document.getElementById('date-start').value);
+            const eDate = new Date(document.getElementById('date-end').value);
+            const range = `${sDate.toLocaleDateString()} - ${eDate.toLocaleDateString()}`;
 
             // PDF Body bauen
             const body = [
