@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+    <style>
+        :root { --bg: #121212; --card: #1e1e1e; --text: #fff; --accent: #3498db; --border: #333; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        h1, h3 { margin-top: 0; }
+        .hidden { display: none !important; }
+        
+        /* Karten-Look */
+        .card { background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        
+        /* Inputs & Buttons */
+        input, button { width: 100%; padding: 12px; margin-top: 5px; border-radius: 8px; border: 1px solid #444; font-size: 1rem; box-sizing: border-box; }
+        input { background: #000; color: white; }
+        button { cursor: pointer; font-weight: bold; border: none; transition: transform 0.1s; }
+        button:active { transform: scale(0.98); }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-success { background: #2ecc71; color: white; }
+        
+        /* Layout */
+        .row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .col { flex: 1; min-width: 140px; }
+        
+        /* Tabelle */
+        .table-wrap { overflow-x: auto; margin-top: 15px; }
+        table { width: 100%; border-collapse: collapse; min-width: 500px; }
+        th, td { padding: 10px; border-bottom: 1px solid #333; text-align: left; font-size: 0.9rem; }
+        th { color: #aaa; text-transform: uppercase; font-size: 0.8rem; }
+        
+        /* Status */
+        .loading { opacity: 0.6; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+    <header style="text-align:center; margin-bottom:20px;">
+        <h1>📄 Zeitzettel Generator</h1>
+    </header>
+
+    <div id="step-login" class="card">
+        <h3>🔐 Login</h3>
+        <p style="color:#aaa; font-size:0.9rem;">Bitte Zugangscode für die Datenbank eingeben.</p>
+        <input type="password" id="api-pw" placeholder="Code eingeben...">
+        <button id="btn-login" class="btn-primary" style="margin-top:15px;">Verbinden</button>
+    </div>
+
+    <div id="step-app" class="hidden">
+        
+        <div class="card">
+            <h3>📅 Zeitraum wählen</h3>
+            <div class="row">
+                <div class="col">
+                    <label style="font-size:0.8rem; color:#aaa">Von:</label>
+                    <input type="date" id="date-start">
+                </div>
+                <div class="col">
+                    <label style="font-size:0.8rem; color:#aaa">Bis:</label>
+                    <input type="date" id="date-end">
+                </div>
+            </div>
+            <button id="btn-load" class="btn-primary" style="margin-top:15px;">Laden & Vorschau</button>
+        </div>
+
+        <div id="preview-section" class="card hidden">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3>Vorschau</h3>
+                <span id="total-hours" style="font-size:1.2rem; font-weight:bold; color:#2ecc71;">0h 00m</span>
+            </div>
+            
+            <div class="table-wrap">
+                <table id="shift-table">
+                    <thead>
+                        <tr><th>Datum</th><th>Typ</th><th>Start</th><th>Ende</th><th>Dauer</th></tr>
+                    </thead>
+                    <tbody id="table-body"></tbody>
+                </table>
+            </div>
+
+            <div style="margin-top:20px; border-top:1px solid #333; padding-top:20px;">
+                <label style="font-size:0.8rem; color:#aaa">Name des Mitarbeiters (für Header):</label>
+                <input type="text" id="employee-name" value="Max Mustermann">
+                
+                <label style="font-size:0.8rem; color:#aaa; margin-top:10px; display:block;">Anschrift / Details (für Header):</label>
+                <input type="text" id="employee-address" value="Musterstraße 1, 12345 Musterstadt">
+
+                <button id="btn-pdf" class="btn-success" style="margin-top:20px;">🖨️ PDF Erstellen</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- KONFIGURATION ---
+        // Fügen Sie hier die URL Ihres NEUEN "Reader" Web Apps Scripts ein:
+        const API_URL = "https://script.google.com/macros/s/AKfycbxpMRFvRHGDeDGLtKu6Q8lHAXnd75Mq4Je3gpZTY30dyIUFBhUq7ecqs7yjp7Qw3iVM/exec"; 
+        // ---------------------
+
+        let allShifts = [];
+        let filteredShifts = [];
+
+        // Init Dates (Aktueller Monat)
+        const now = new Date();
+        document.getElementById('date-start').valueAsDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        document.getElementById('date-end').valueAsDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+        // LOGIN & FETCH
+        document.getElementById('btn-login').addEventListener('click', async () => {
+            const pw = document.getElementById('api-pw').value;
+            const btn = document.getElementById('btn-login');
+            
+            if(!pw) return alert("Bitte Code eingeben.");
+            
+            btn.innerText = "Lade...";
+            btn.classList.add('loading');
+
+            try {
+                const res = await fetch(API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({ password: pw })
+                });
+                const json = await res.json();
+
+                if (json.result === "success") {
+                    allShifts = json.data;
+                    document.getElementById('step-login').classList.add('hidden');
+                    document.getElementById('step-app').classList.remove('hidden');
+                    // Automatisch aktuellen Monat laden
+                    filterAndRender();
+                } else {
+                    alert("Fehler: " + json.message);
+                }
+            } catch (e) {
+                alert("Verbindungsfehler. Checken Sie Internet & URL.");
+                console.error(e);
+            } finally {
+                btn.innerText = "Verbinden";
+                btn.classList.remove('loading');
+            }
+        });
+
+        // LOAD BUTTON
+        document.getElementById('btn-load').addEventListener('click', filterAndRender);
+
+        function filterAndRender() {
+            const start = new Date(document.getElementById('date-start').value);
+            start.setHours(0,0,0,0);
+            const end = new Date(document.getElementById('date-end').value);
+            end.setHours(23,59,59,999);
+
+            // Filterung
+            filteredShifts = allShifts.filter(s => {
+                if(!s.start || !s.end) return false;
+                const d = new Date(s.start);
+                return d >= start && d <= end;
+            });
+
+            // Sortierung (alt nach neu)
+            filteredShifts.sort((a,b) => new Date(a.start) - new Date(b.start));
+
+            renderTable();
+            document.getElementById('preview-section').classList.remove('hidden');
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+            let totalMins = 0;
+
+            if(filteredShifts.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px;">Keine Schichten in diesem Zeitraum.</td></tr>';
+                document.getElementById('total-hours').innerText = "0h 00m";
+                return;
+            }
+
+            filteredShifts.forEach(s => {
+                const dStart = new Date(s.start);
+                const dEnd = new Date(s.end);
+                
+                const diff = (dEnd - dStart) / 60000; // Minuten
+                totalMins += diff;
+
+                const h = Math.floor(diff / 60);
+                const m = Math.round(diff % 60);
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${dStart.toLocaleDateString()}</td>
+                    <td>${s.type}</td>
+                    <td>${dStart.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                    <td>${dEnd.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                    <td>${h}:${String(m).padStart(2,'0')}h</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            const totalH = Math.floor(totalMins / 60);
+            const totalM = Math.round(totalMins % 60);
+            document.getElementById('total-hours').innerText = `${totalH}h ${String(totalM).padStart(2,'0')}m`;
+        }
+
+        // PDF GENERATION
+        document.getElementById('btn-pdf').addEventListener('click', () => {
+            if(filteredShifts.length === 0) return alert("Leerer Report macht keinen Sinn.");
+
+            const name = document.getElementById('employee-name').value;
+            const address = document.getElementById('employee-address').value;
+            const range = `${new Date(document.getElementById('date-start').value).toLocaleDateString()} - ${new Date(document.getElementById('date-end').value).toLocaleDateString()}`;
+
+            // PDF Body bauen
+            const body = [
+                // Header Row
+                [
+                    { text: 'Datum', bold: true, fillColor: '#eeeeee' },
+                    { text: 'Tätigkeit', bold: true, fillColor: '#eeeeee' },
+                    { text: 'Start', bold: true, fillColor: '#eeeeee' },
+                    { text: 'Ende', bold: true, fillColor: '#eeeeee' },
+                    { text: 'Dauer', bold: true, fillColor: '#eeeeee', alignment: 'right' }
+                ]
+            ];
+
+            let totalMins = 0;
+
+            filteredShifts.forEach(s => {
+                const dStart = new Date(s.start);
+                const dEnd = new Date(s.end);
+                const diff = (dEnd - dStart) / 60000;
+                totalMins += diff;
+
+                body.push([
+                    dStart.toLocaleDateString(),
+                    s.type,
+                    dStart.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                    dEnd.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                    { text: `${Math.floor(diff/60)}:${String(Math.round(diff%60)).padStart(2,'0')}`, alignment: 'right' }
+                ]);
+            });
+
+            // Summenzeile
+            const totalH = Math.floor(totalMins / 60);
+            const totalM = Math.round(totalMins % 60);
+            
+            body.push([
+                { text: 'GESAMT', colSpan: 4, bold: true, alignment: 'right' }, {}, {}, {},
+                { text: `${totalH}:${String(totalM).padStart(2,'0')}h`, bold: true, alignment: 'right' }
+            ]);
+
+            // PDF Definition
+            const docDefinition = {
+                content: [
+                    { text: name, style: 'headerTop' },
+                    { text: address, style: 'headerAddress' },
+                    { text: '\n' },
+                    { text: 'Stundennachweis', style: 'title' },
+                    { text: `Zeitraum: ${range}`, style: 'subtitle' },
+                    { text: '\n' },
+                    {
+                        table: {
+                            headerRows: 1,
+                            widths: ['auto', '*', 'auto', 'auto', 'auto'],
+                            body: body
+                        },
+                        layout: 'lightHorizontalLines'
+                    },
+                    { text: '\n\n\n' },
+                    { text: 'Mit freundlichen Grüßen,', style: 'footerText' },
+                    { text: '\n__________________________', style: 'line' },
+                    { text: 'Unterschrift', style: 'footerSmall' }
+                ],
+                styles: {
+                    headerTop: { fontSize: 14, bold: true },
+                    headerAddress: { fontSize: 10, color: '#555' },
+                    title: { fontSize: 18, bold: true, decoration: 'underline' },
+                    subtitle: { fontSize: 12, italics: true, margin: [0, 5, 0, 0] },
+                    footerText: { fontSize: 11 },
+                    footerSmall: { fontSize: 9, italics: true, margin: [0, 5, 0, 0] }
+                },
+                defaultStyle: { font: 'Roboto' } // PDFMake Standard Font
+            };
+
+            pdfMake.createPdf(docDefinition).download(`Stundenzettel_${name}.pdf`);
+        });
+    </script>
+</body>
+</html>
