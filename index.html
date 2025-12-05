@@ -5,86 +5,50 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zeitzettel Generator</title>
     
+    <script>
+        window.onerror = function(msg, url, line) {
+            alert("⚠️ SYSTEM-FEHLER:\n" + msg + "\n\nZeile: " + line);
+            return false;
+        };
+    </script>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
     
     <style>
-        :root { 
-            --bg: #121212; 
-            --card: #1e1e1e; 
-            --text: #fff; 
-            --accent: #3498db; 
-            --border: #333; 
-            --success: #2ecc71; 
-        }
-        body { 
-            background: var(--bg); 
-            color: var(--text); 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            padding: 20px; 
-            max-width: 800px; 
-            margin: 0 auto; 
-        }
+        :root { --bg: #121212; --card: #1e1e1e; --text: #fff; --accent: #3498db; --border: #333; --success: #2ecc71; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
         h1, h3 { margin-top: 0; }
         .hidden { display: none !important; }
         
-        /* Karten-Look */
-        .card { 
-            background: var(--card); 
-            padding: 20px; 
-            border-radius: 12px; 
-            border: 1px solid var(--border); 
-            margin-bottom: 20px; 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
-        }
+        .card { background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
         
-        /* Inputs & Buttons */
-        input, button { 
-            width: 100%; 
-            padding: 12px; 
-            margin-top: 5px; 
-            border-radius: 8px; 
-            border: 1px solid #444; 
-            font-size: 1rem; 
-            box-sizing: border-box; 
-        }
+        input, button { width: 100%; padding: 12px; margin-top: 5px; border-radius: 8px; border: 1px solid #444; font-size: 1rem; box-sizing: border-box; }
         input { background: #000; color: white; }
         
-        button { 
-            cursor: pointer; 
-            font-weight: bold; 
-            border: none; 
-            transition: transform 0.1s; 
-        }
+        button { cursor: pointer; font-weight: bold; border: none; transition: transform 0.1s; }
         button:active { transform: scale(0.98); }
         
         .btn-primary { background: var(--accent); color: white; }
         .btn-success { background: var(--success); color: white; }
         
-        /* Layout */
         .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
         .col { flex: 1; min-width: 140px; }
         
-        /* Header Bereich */
-        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        #api-pw { width: 100px; padding: 8px; font-size: 0.8rem; border-color: #333; color: #aaa; background: transparent; text-align: center; }
-        
-        /* Tabelle */
         .table-wrap { overflow-x: auto; margin-top: 15px; border-radius: 8px; border: 1px solid #333; }
         table { width: 100%; border-collapse: collapse; min-width: 500px; }
         th, td { padding: 12px; border-bottom: 1px solid #333; text-align: left; font-size: 0.9rem; }
         th { background: #252525; color: #aaa; text-transform: uppercase; font-size: 0.8rem; }
         tr:last-child td { border-bottom: none; }
         
-        /* Loading State */
         .loading { opacity: 0.6; pointer-events: none; cursor: wait; }
     </style>
 </head>
 <body>
 
-    <header>
+    <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
         <h1 style="margin:0; font-size:1.5rem;">📄 Zeitzettel</h1>
-        <input type="password" id="api-pw" placeholder="Code...">
+        <input type="password" id="api-pw" placeholder="Code..." style="width:80px; padding:5px; background:transparent; border:1px solid #333; text-align:center; color:#aaa;">
     </header>
 
     <div class="card">
@@ -133,11 +97,18 @@
         let filteredShifts = [];
         let metaData = { name: "Mitarbeiter", address: "" };
 
-        // Init: Passwort aus LocalStorage laden
-        const storedPW = localStorage.getItem('reporter_pw');
-        if(storedPW) document.getElementById('api-pw').value = storedPW;
+        // Bibliotheken-Check beim Start
+        if (typeof pdfMake === 'undefined') {
+            alert("ACHTUNG: PDF-Bibliothek konnte nicht geladen werden. Bitte Adblocker prüfen oder Internetverbindung checken.");
+        }
 
-        // Init: Datumsfelder (Aktueller Monat)
+        // Init: Passwort aus LocalStorage laden
+        try {
+            const storedPW = localStorage.getItem('reporter_pw');
+            if(storedPW) document.getElementById('api-pw').value = storedPW;
+        } catch(e) { console.warn("LocalStorage Fehler:", e); }
+
+        // Init: Datumsfelder
         const now = new Date();
         document.getElementById('date-start').valueAsDate = new Date(now.getFullYear(), now.getMonth(), 1);
         document.getElementById('date-end').valueAsDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -145,6 +116,8 @@
         // --- LOGIC ---
 
         document.getElementById('btn-load').addEventListener('click', async () => {
+            console.log("Button geklickt..."); // Debug Lebenszeichen
+            
             const btn = document.getElementById('btn-load');
             const pwInp = document.getElementById('api-pw');
             const pw = pwInp.value.trim();
@@ -154,8 +127,8 @@
                 pwInp.focus();
                 return;
             }
-            // Passwort speichern für nächsten Besuch
-            localStorage.setItem('reporter_pw', pw);
+            
+            try { localStorage.setItem('reporter_pw', pw); } catch(e){}
 
             btn.innerText = "Lade...";
             btn.classList.add('loading');
@@ -164,6 +137,7 @@
             const endVal = document.getElementById('date-end').value;
 
             try {
+                console.log("Sende Request an Google...");
                 const res = await fetch(API_URL, {
                     method: "POST",
                     body: JSON.stringify({ 
@@ -172,27 +146,27 @@
                         endDate: endVal
                     })
                 });
+                
+                console.log("Antwort erhalten. Parse JSON...");
                 const json = await res.json();
 
                 if (json.result === "success") {
+                    console.log("Daten erfolgreich geladen:", json.data.length);
                     filteredShifts = json.data;
                     metaData = json.meta || { name: "", address: "" }; 
                     
-                    // UI Update mit Stammdaten
                     document.getElementById('display-name').innerText = metaData.name || "(Kein Name hinterlegt)";
                     document.getElementById('display-address').innerText = metaData.address || "(Keine Adresse hinterlegt)";
                     
-                    // Sortieren: Älteste zuerst
                     filteredShifts.sort((a,b) => new Date(a.start) - new Date(b.start));
-                    
                     renderTable();
                     document.getElementById('preview-section').classList.remove('hidden');
                 } else {
                     alert("Server-Fehler: " + json.message);
                 }
             } catch (e) {
-                console.error(e);
-                alert("Verbindungsfehler. Bitte Internet prüfen.");
+                console.error("Fetch Fehler:", e);
+                alert("Verbindungsfehler: " + e.message);
             } finally {
                 btn.innerText = "Daten laden";
                 btn.classList.remove('loading');
@@ -245,85 +219,96 @@
         document.getElementById('btn-pdf').addEventListener('click', () => {
             if(filteredShifts.length === 0) return alert("Leerer Report.");
 
-            const name = metaData.name || "Mitarbeiter";
-            const address = metaData.address || "";
-            
-            const dStart = new Date(document.getElementById('date-start').value);
-            const dEnd = new Date(document.getElementById('date-end').value);
-            const rangeStr = `${dStart.toLocaleDateString()} - ${dEnd.toLocaleDateString()}`;
-            
-            // Dateiname bauen
-            const safeName = name.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g, "_");
-            const fileName = `Stundenzettel_${dStart.toLocaleDateString()}-${dEnd.toLocaleDateString()}-${safeName}.pdf`;
-
-            const body = [
-                [
-                    { text: 'Datum', bold: true, fillColor: '#eeeeee' },
-                    { text: 'Tätigkeit', bold: true, fillColor: '#eeeeee' },
-                    { text: 'Start', bold: true, fillColor: '#eeeeee' },
-                    { text: 'Ende', bold: true, fillColor: '#eeeeee' },
-                    { text: 'Dauer', bold: true, fillColor: '#eeeeee', alignment: 'right' }
-                ]
-            ];
-
-            let totalMins = 0;
-
-            filteredShifts.forEach(s => {
-                const dS = new Date(s.start);
-                const dE = s.end ? new Date(s.end) : null;
-                let durStr = "";
-                let timeEnd = "";
+            try {
+                const name = metaData.name || "Mitarbeiter";
+                const address = metaData.address || "";
                 
-                if (dE) {
-                    const diff = (dE - dS) / 60000;
-                    totalMins += diff;
-                    durStr = `${Math.floor(diff/60)}:${String(Math.round(diff%60)).padStart(2,'0')}`;
-                    timeEnd = dE.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-                }
+                const dStart = new Date(document.getElementById('date-start').value);
+                const dEnd = new Date(document.getElementById('date-end').value);
+                const rangeStr = `${dStart.toLocaleDateString()} - ${dEnd.toLocaleDateString()}`;
+                
+                const cleanName = name.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g, "_");
+                const fileName = `Stundenzettel_${dStart.toLocaleDateString()}-${dEnd.toLocaleDateString()}-${cleanName}.pdf`;
 
-                body.push([
-                    dS.toLocaleDateString(),
-                    s.type,
-                    dS.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
-                    timeEnd,
-                    { text: durStr, alignment: 'right' }
-                ]);
-            });
+                const body = [
+                    [
+                        { text: 'Datum', bold: true, fillColor: '#eeeeee' },
+                        { text: 'Tätigkeit', bold: true, fillColor: '#eeeeee' },
+                        { text: 'Start', bold: true, fillColor: '#eeeeee' },
+                        { text: 'Ende', bold: true, fillColor: '#eeeeee' },
+                        { text: 'Dauer', bold: true, fillColor: '#eeeeee', alignment: 'right' }
+                    ]
+                ];
 
-            // Summenzeile
-            const h = Math.floor(totalMins/60);
-            const m = Math.round(totalMins%60);
-            
-            body.push([
-                { text: 'GESAMT', colSpan: 4, bold: true, alignment: 'right' }, {}, {}, {},
-                { text: `${h}:${String(m).padStart(2,'0')}h`, bold: true, alignment: 'right' }
-            ]);
+                let totalMins = 0;
 
-            const docDefinition = {
-                content: [
-                    { text: name, style: 'headerTop' },
-                    { text: address, style: 'headerAddress', margin: [0, 2, 0, 20] }, 
+                filteredShifts.forEach(s => {
+                    const dS = new Date(s.start);
+                    const dE = s.end ? new Date(s.end) : null;
+                    let durStr = "";
+                    let timeEnd = "";
                     
-                    { text: 'Stundennachweis', style: 'title' },
-                    { text: `Zeitraum: ${rangeStr}`, style: 'subtitle' },
-                    { text: '\n' },
-                    {
-                        table: {
-                            headerRows: 1,
-                            widths: ['auto', '*', 'auto', 'auto', 'auto'],
-                            body: body
+                    if (dE) {
+                        const diff = (dE - dS) / 60000;
+                        totalMins += diff;
+                        durStr = `${Math.floor(diff/60)}:${String(Math.round(diff%60)).padStart(2,'0')}`;
+                        timeEnd = dE.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                    }
+
+                    body.push([
+                        dS.toLocaleDateString(),
+                        s.type,
+                        dS.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                        timeEnd,
+                        { text: durStr, alignment: 'right' }
+                    ]);
+                });
+
+                const h = Math.floor(totalMins/60);
+                const m = Math.round(totalMins%60);
+                
+                body.push([
+                    { text: 'GESAMT', colSpan: 4, bold: true, alignment: 'right' }, {}, {}, {},
+                    { text: `${h}:${String(m).padStart(2,'0')}h`, bold: true, alignment: 'right' }
+                ]);
+
+                const docDefinition = {
+                    content: [
+                        { text: name, style: 'headerTop' },
+                        { text: address, style: 'headerAddress', margin: [0, 2, 0, 20] }, 
+                        { text: 'Stundennachweis', style: 'title' },
+                        { text: `Zeitraum: ${rangeStr}`, style: 'subtitle' },
+                        { text: '\n' },
+                        {
+                            table: {
+                                headerRows: 1,
+                                widths: ['auto', '*', 'auto', 'auto', 'auto'],
+                                body: body
+                            },
+                            layout: 'lightHorizontalLines'
                         },
-                        layout: 'lightHorizontalLines'
+                        { text: '\n\n\n' },
+                        { text: 'Mit freundlichen Grüßen,', style: 'footerText' },
+                        { text: '\n__________________________', style: 'line' },
+                        { text: 'Unterschrift', style: 'footerSmall' }
+                    ],
+                    styles: {
+                        headerTop: { fontSize: 16, bold: true },
+                        headerAddress: { fontSize: 11, color: '#555' },
+                        title: { fontSize: 18, bold: true, decoration: 'underline' },
+                        subtitle: { fontSize: 12, italics: true, margin: [0, 5, 0, 0] },
+                        footerText: { fontSize: 11 },
+                        footerSmall: { fontSize: 9, italics: true, margin: [0, 5, 0, 0] }
                     },
-                    { text: '\n\n\n' },
-                    { text: 'Mit freundlichen Grüßen,', style: 'footerText' },
-                    { text: '\n__________________________', style: 'line' },
-                    { text: 'Unterschrift', style: 'footerSmall' }
-                ],
-                styles: {
-                    headerTop: { fontSize: 16, bold: true },
-                    headerAddress: { fontSize: 11, color: '#555' },
-                    title: { fontSize: 18, bold: true, decoration: 'underline' },
-                    subtitle: { fontSize: 12, italics: true, margin: [0, 5, 0, 0] },
-                    footerText: { fontSize: 11 },
-                    footerSmall: { fontSize: 9, italics: true, margin: [0, 5
+                    defaultStyle: { font: 'Roboto' }
+                };
+
+                pdfMake.createPdf(docDefinition).download(fileName);
+            } catch(e) {
+                alert("Fehler beim Erstellen des PDFs: " + e.message);
+                console.error(e);
+            }
+        });
+    </script>
+</body>
+</html>
