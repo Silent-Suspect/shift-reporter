@@ -33,9 +33,8 @@
         th, td { padding: 12px; border-bottom: 1px solid #333; text-align: left; font-size: 0.9rem; }
         th { background: #252525; color: #aaa; text-transform: uppercase; font-size: 0.8rem; }
         
-        /* Passwort Feld klein */
         .pw-container { margin-bottom: 20px; text-align: right; }
-        #api-pw { width: auto; display: inline-block; padding: 8px; font-size: 0.8rem; border-color: #333; color: #aaa; }
+        #api-pw { width: auto; display: inline-block; padding: 8px; font-size: 0.8rem; border-color: #333; color: #aaa; background:transparent; }
         
         .loading { opacity: 0.6; pointer-events: none; cursor: wait; }
     </style>
@@ -44,7 +43,7 @@
 
     <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
         <h1 style="margin:0; font-size:1.5rem;">📄 Zeitzettel</h1>
-        <input type="password" id="api-pw" placeholder="Code..." style="width:80px; padding:5px; font-size:0.8rem; border:1px solid #333; background:transparent;">
+        <input type="password" id="api-pw" placeholder="Code..." style="width:80px;">
     </header>
 
     <div class="card">
@@ -79,7 +78,8 @@
 
         <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
             <p style="color:#aaa; font-size:0.9rem; margin-bottom:10px;">
-                Erstelle Report für: <b id="display-name" style="color:white;">...</b>
+                Mitarbeiter: <b id="display-name" style="color:white;">...</b><br>
+                Adresse: <span id="display-address" style="color:white;">...</span>
             </p>
             <button id="btn-pdf" class="btn-success">🖨️ PDF Erstellen</button>
         </div>
@@ -89,7 +89,7 @@
         const API_URL = "https://script.google.com/macros/s/AKfycbxpMRFvRHGDeDGLtKu6Q8lHAXnd75Mq4Je3gpZTY30dyIUFBhUq7ecqs7yjp7Qw3iVM/exec"; 
         
         let filteredShifts = [];
-        let metaData = { name: "Unbekannt", address: "" };
+        let metaData = { name: "Mitarbeiter", address: "" };
 
         // Init: Passwort laden
         const storedPW = localStorage.getItem('reporter_pw');
@@ -112,8 +112,6 @@
                 pwInp.focus();
                 return;
             }
-
-            // Passwort speichern
             localStorage.setItem('reporter_pw', pw);
 
             btn.innerText = "Lade...";
@@ -135,10 +133,11 @@
 
                 if (json.result === "success") {
                     filteredShifts = json.data;
-                    metaData = json.meta || { name: "", address: "" }; // Settings speichern
+                    metaData = json.meta || { name: "", address: "" }; 
                     
                     // UI Update
-                    document.getElementById('display-name').innerText = metaData.name || "Kein Name in Settings";
+                    document.getElementById('display-name').innerText = metaData.name || "(Kein Name)";
+                    document.getElementById('display-address').innerText = metaData.address || "(Keine Adresse)";
                     
                     filteredShifts.sort((a,b) => new Date(a.start) - new Date(b.start));
                     renderTable();
@@ -203,9 +202,16 @@
 
             const name = metaData.name || "Mitarbeiter";
             const address = metaData.address || "";
-            const sDate = new Date(document.getElementById('date-start').value);
-            const eDate = new Date(document.getElementById('date-end').value);
-            const range = `${sDate.toLocaleDateString()} - ${eDate.toLocaleDateString()}`;
+            
+            // Datumsobjekte für Dateinamen und Header
+            const dStart = new Date(document.getElementById('date-start').value);
+            const dEnd = new Date(document.getElementById('date-end').value);
+            
+            const rangeStr = `${dStart.toLocaleDateString()} - ${dEnd.toLocaleDateString()}`;
+            
+            // Dateiname bauen: Stundenzettel_DD.MM.YYYY-DD.MM.YYYY-Name.pdf
+            const cleanName = name.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g, "_"); // Nur sichere Zeichen
+            const fileName = `Stundenzettel_${dStart.toLocaleDateString()}-${dEnd.toLocaleDateString()}-${cleanName}.pdf`;
 
             const body = [
                 [
@@ -220,22 +226,22 @@
             let totalMins = 0;
 
             filteredShifts.forEach(s => {
-                const dStart = new Date(s.start);
-                const dEnd = s.end ? new Date(s.end) : null;
+                const dS = new Date(s.start);
+                const dE = s.end ? new Date(s.end) : null;
                 let durStr = "";
                 let timeEnd = "";
                 
-                if (dEnd) {
-                    const diff = (dEnd - dStart) / 60000;
+                if (dE) {
+                    const diff = (dE - dS) / 60000;
                     totalMins += diff;
                     durStr = `${Math.floor(diff/60)}:${String(Math.round(diff%60)).padStart(2,'0')}`;
-                    timeEnd = dEnd.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                    timeEnd = dE.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
                 }
 
                 body.push([
-                    dStart.toLocaleDateString(),
+                    dS.toLocaleDateString(),
                     s.type,
-                    dStart.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                    dS.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
                     timeEnd,
                     { text: durStr, alignment: 'right' }
                 ]);
@@ -252,10 +258,10 @@
             const docDefinition = {
                 content: [
                     { text: name, style: 'headerTop' },
-                    { text: address, style: 'headerAddress' },
-                    { text: '\n' },
+                    { text: address, style: 'headerAddress', margin: [0, 2, 0, 20] }, // Extra Margin für Adresse
+                    
                     { text: 'Stundennachweis', style: 'title' },
-                    { text: `Zeitraum: ${range}`, style: 'subtitle' },
+                    { text: `Zeitraum: ${rangeStr}`, style: 'subtitle' },
                     { text: '\n' },
                     {
                         table: {
@@ -271,8 +277,8 @@
                     { text: 'Unterschrift', style: 'footerSmall' }
                 ],
                 styles: {
-                    headerTop: { fontSize: 14, bold: true },
-                    headerAddress: { fontSize: 10, color: '#555' },
+                    headerTop: { fontSize: 16, bold: true },
+                    headerAddress: { fontSize: 11, color: '#555' },
                     title: { fontSize: 18, bold: true, decoration: 'underline' },
                     subtitle: { fontSize: 12, italics: true, margin: [0, 5, 0, 0] },
                     footerText: { fontSize: 11 },
@@ -281,8 +287,8 @@
                 defaultStyle: { font: 'Roboto' }
             };
 
-            pdfMake.createPdf(docDefinition).download(`Stundenzettel_${name}.pdf`);
-        });
+            pdfMake.createPdf(docDefinition).download(fileName);
+        }
     </script>
 </body>
 </html>
