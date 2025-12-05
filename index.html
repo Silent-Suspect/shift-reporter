@@ -3,127 +3,327 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Report Generator (DEBUG MODE)</title>
+    <title>Zeitzettel Generator</title>
     
-    <script>
-        window.onerror = function(msg, url, line) {
-            alert("FEHLER: " + msg + "\nZeile: " + line);
-            return false;
-        };
-    </script>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
     
     <style>
-        body { font-family: sans-serif; background: #222; color: #fff; padding: 20px; }
-        button { padding: 15px; width: 100%; font-size: 1.2rem; margin-top: 10px; cursor: pointer; }
-        input { padding: 10px; width: 100%; box-sizing: border-box; margin-top: 5px; }
-        .hidden { display: none; }
+        :root { 
+            --bg: #121212; 
+            --card: #1e1e1e; 
+            --text: #fff; 
+            --accent: #3498db; 
+            --border: #333; 
+            --success: #2ecc71; 
+        }
+        body { 
+            background: var(--bg); 
+            color: var(--text); 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            padding: 20px; 
+            max-width: 800px; 
+            margin: 0 auto; 
+        }
+        h1, h3 { margin-top: 0; }
+        .hidden { display: none !important; }
+        
+        /* Karten-Look */
+        .card { 
+            background: var(--card); 
+            padding: 20px; 
+            border-radius: 12px; 
+            border: 1px solid var(--border); 
+            margin-bottom: 20px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
+        }
+        
+        /* Inputs & Buttons */
+        input, button { 
+            width: 100%; 
+            padding: 12px; 
+            margin-top: 5px; 
+            border-radius: 8px; 
+            border: 1px solid #444; 
+            font-size: 1rem; 
+            box-sizing: border-box; 
+        }
+        input { background: #000; color: white; }
+        
+        button { 
+            cursor: pointer; 
+            font-weight: bold; 
+            border: none; 
+            transition: transform 0.1s; 
+        }
+        button:active { transform: scale(0.98); }
+        
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        
+        /* Layout */
+        .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+        .col { flex: 1; min-width: 140px; }
+        
+        /* Header Bereich */
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        #api-pw { width: 100px; padding: 8px; font-size: 0.8rem; border-color: #333; color: #aaa; background: transparent; text-align: center; }
+        
+        /* Tabelle */
+        .table-wrap { overflow-x: auto; margin-top: 15px; border-radius: 8px; border: 1px solid #333; }
+        table { width: 100%; border-collapse: collapse; min-width: 500px; }
+        th, td { padding: 12px; border-bottom: 1px solid #333; text-align: left; font-size: 0.9rem; }
+        th { background: #252525; color: #aaa; text-transform: uppercase; font-size: 0.8rem; }
+        tr:last-child td { border-bottom: none; }
+        
+        /* Loading State */
+        .loading { opacity: 0.6; pointer-events: none; cursor: wait; }
     </style>
 </head>
 <body>
 
-    <h1>🔧 Diagnose Modus</h1>
-    
-    <div id="status" style="border:1px solid yellow; padding:10px; margin-bottom:10px; color:yellow;">
-        Warte auf Start...
+    <header>
+        <h1 style="margin:0; font-size:1.5rem;">📄 Zeitzettel</h1>
+        <input type="password" id="api-pw" placeholder="Code...">
+    </header>
+
+    <div class="card">
+        <h3>📅 Zeitraum</h3>
+        <div class="row">
+            <div class="col">
+                <label style="font-size:0.8rem; color:#aaa">Von:</label>
+                <input type="date" id="date-start">
+            </div>
+            <div class="col">
+                <label style="font-size:0.8rem; color:#aaa">Bis:</label>
+                <input type="date" id="date-end">
+            </div>
+        </div>
+        <button id="btn-load" class="btn-primary" style="margin-top:15px;">Daten laden</button>
     </div>
 
-    <label>Von:</label><input type="date" id="date-start">
-    <label>Bis:</label><input type="date" id="date-end">
-    <label>Code:</label><input type="password" id="api-pw" placeholder="Code...">
-    
-    <button id="btn-load">🚀 Daten Laden (Test)</button>
-    
-    <div id="result-area" class="hidden" style="margin-top:20px; border-top:1px solid #fff;">
-        <h3>Ergebnis:</h3>
-        <pre id="output">...</pre>
-        <button id="btn-pdf">🖨️ PDF Testen</button>
+    <div id="preview-section" class="card hidden">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>Vorschau</h3>
+            <span id="total-hours" style="font-size:1.2rem; font-weight:bold; color:var(--success);">0h 00m</span>
+        </div>
+        
+        <div class="table-wrap">
+            <table id="shift-table">
+                <thead>
+                    <tr><th>Datum</th><th>Typ</th><th>Start</th><th>Ende</th><th>Dauer</th></tr>
+                </thead>
+                <tbody id="table-body"></tbody>
+            </table>
+        </div>
+
+        <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+            <p style="color:#aaa; font-size:0.9rem; margin-bottom:10px;">
+                Mitarbeiter: <b id="display-name" style="color:white;">Lädt...</b><br>
+                Adresse: <span id="display-address" style="color:white;">Lädt...</span>
+            </p>
+            <button id="btn-pdf" class="btn-success">🖨️ PDF Erstellen</button>
+        </div>
     </div>
 
     <script>
-        // Check ob Libraries da sind
-        if (typeof pdfMake === 'undefined') {
-            alert("KRITISCH: pdfMake wurde nicht geladen! Checken Sie Ihre Internetverbindung oder Adblocker.");
-            document.getElementById('status').innerText = "Bibliothek fehlt!";
-        } else {
-            document.getElementById('status').innerText = "System Bereit.";
-        }
-
+        // Ihre Reader API URL
         const API_URL = "https://script.google.com/macros/s/AKfycbxpMRFvRHGDeDGLtKu6Q8lHAXnd75Mq4Je3gpZTY30dyIUFBhUq7ecqs7yjp7Qw3iVM/exec"; 
-
-        // Init
-        const now = new Date();
-        document.getElementById('date-start').valueAsDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        document.getElementById('date-end').valueAsDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
         
-        // PW laden
+        let filteredShifts = [];
+        let metaData = { name: "Mitarbeiter", address: "" };
+
+        // Init: Passwort aus LocalStorage laden
         const storedPW = localStorage.getItem('reporter_pw');
         if(storedPW) document.getElementById('api-pw').value = storedPW;
 
-        document.getElementById('btn-load').addEventListener('click', async () => {
-            alert("Button geklickt! Starte..."); // Lebenszeichen
-            
-            const btn = document.getElementById('btn-load');
-            const pw = document.getElementById('api-pw').value;
-            const sDate = document.getElementById('date-start').value;
-            const eDate = document.getElementById('date-end').value;
+        // Init: Datumsfelder (Aktueller Monat)
+        const now = new Date();
+        document.getElementById('date-start').valueAsDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        document.getElementById('date-end').valueAsDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-            if(!pw) return alert("Kein Passwort!");
+        // --- LOGIC ---
+
+        document.getElementById('btn-load').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-load');
+            const pwInp = document.getElementById('api-pw');
+            const pw = pwInp.value.trim();
+
+            if(!pw) {
+                alert("Bitte Zugangscode oben rechts eingeben.");
+                pwInp.focus();
+                return;
+            }
+            // Passwort speichern für nächsten Besuch
             localStorage.setItem('reporter_pw', pw);
 
-            btn.innerText = "Sende Anfrage an Google...";
-            
+            btn.innerText = "Lade...";
+            btn.classList.add('loading');
+
+            const startVal = document.getElementById('date-start').value;
+            const endVal = document.getElementById('date-end').value;
+
             try {
-                // Fetch starten
                 const res = await fetch(API_URL, {
                     method: "POST",
                     body: JSON.stringify({ 
                         password: pw,
-                        startDate: sDate,
-                        endDate: eDate
+                        startDate: startVal,
+                        endDate: endVal
                     })
                 });
-                
-                btn.innerText = "Antwort erhalten. Parse JSON...";
                 const json = await res.json();
 
                 if (json.result === "success") {
-                    alert("Erfolg! " + json.data.length + " Datensätze.");
-                    document.getElementById('output').innerText = JSON.stringify(json.meta, null, 2);
-                    document.getElementById('result-area').classList.remove('hidden');
-                    // Globale Variable für PDF speichern
-                    window.reportData = json.data;
-                    window.reportMeta = json.meta;
+                    filteredShifts = json.data;
+                    metaData = json.meta || { name: "", address: "" }; 
+                    
+                    // UI Update mit Stammdaten
+                    document.getElementById('display-name').innerText = metaData.name || "(Kein Name hinterlegt)";
+                    document.getElementById('display-address').innerText = metaData.address || "(Keine Adresse hinterlegt)";
+                    
+                    // Sortieren: Älteste zuerst
+                    filteredShifts.sort((a,b) => new Date(a.start) - new Date(b.start));
+                    
+                    renderTable();
+                    document.getElementById('preview-section').classList.remove('hidden');
                 } else {
-                    alert("Server Fehler: " + json.message);
+                    alert("Server-Fehler: " + json.message);
                 }
             } catch (e) {
-                alert("CRASH: " + e.message);
+                console.error(e);
+                alert("Verbindungsfehler. Bitte Internet prüfen.");
             } finally {
-                btn.innerText = "🚀 Daten Laden (Test)";
+                btn.innerText = "Daten laden";
+                btn.classList.remove('loading');
             }
         });
 
-        document.getElementById('btn-pdf').addEventListener('click', () => {
-            try {
-                const data = window.reportData || [];
-                const meta = window.reportMeta || {};
-                
-                const docDefinition = {
-                    content: [
-                        { text: 'Diagnose PDF', style: 'header' },
-                        { text: 'Name aus DB: ' + (meta.name || 'fehlt') },
-                        { text: 'Anzahl Schichten: ' + data.length }
-                    ]
-                };
-                pdfMake.createPdf(docDefinition).download('test.pdf');
-                alert("PDF Download gestartet.");
-            } catch(e) {
-                alert("PDF Fehler: " + e.message);
+        function renderTable() {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = '';
+            let totalMins = 0;
+
+            if(filteredShifts.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#aaa;">Keine Daten in diesem Zeitraum.</td></tr>';
+                document.getElementById('total-hours').innerText = "0h 00m";
+                return;
             }
-        });
-    </script>
-</body>
-</html>
+
+            filteredShifts.forEach(s => {
+                const dStart = new Date(s.start);
+                const dEnd = s.end ? new Date(s.end) : null;
+                
+                let durStr = "-";
+                let timeEndStr = "Läuft...";
+
+                if (dEnd) {
+                    const diff = (dEnd - dStart) / 60000;
+                    totalMins += diff;
+                    const h = Math.floor(diff / 60);
+                    const m = Math.round(diff % 60);
+                    durStr = `${h}:${String(m).padStart(2,'0')}h`;
+                    timeEndStr = dEnd.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                }
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${dStart.toLocaleDateString()}</td>
+                    <td>${s.type}</td>
+                    <td>${dStart.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                    <td>${timeEndStr}</td>
+                    <td>${durStr}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            const totalH = Math.floor(totalMins / 60);
+            const totalM = Math.round(totalMins % 60);
+            document.getElementById('total-hours').innerText = `${totalH}h ${String(totalM).padStart(2,'0')}m`;
+        }
+
+        document.getElementById('btn-pdf').addEventListener('click', () => {
+            if(filteredShifts.length === 0) return alert("Leerer Report.");
+
+            const name = metaData.name || "Mitarbeiter";
+            const address = metaData.address || "";
+            
+            const dStart = new Date(document.getElementById('date-start').value);
+            const dEnd = new Date(document.getElementById('date-end').value);
+            const rangeStr = `${dStart.toLocaleDateString()} - ${dEnd.toLocaleDateString()}`;
+            
+            // Dateiname bauen
+            const safeName = name.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g, "_");
+            const fileName = `Stundenzettel_${dStart.toLocaleDateString()}-${dEnd.toLocaleDateString()}-${safeName}.pdf`;
+
+            const body = [
+                [
+                    { text: 'Datum', bold: true, fillColor: '#eeeeee' },
+                    { text: 'Tätigkeit', bold: true, fillColor: '#eeeeee' },
+                    { text: 'Start', bold: true, fillColor: '#eeeeee' },
+                    { text: 'Ende', bold: true, fillColor: '#eeeeee' },
+                    { text: 'Dauer', bold: true, fillColor: '#eeeeee', alignment: 'right' }
+                ]
+            ];
+
+            let totalMins = 0;
+
+            filteredShifts.forEach(s => {
+                const dS = new Date(s.start);
+                const dE = s.end ? new Date(s.end) : null;
+                let durStr = "";
+                let timeEnd = "";
+                
+                if (dE) {
+                    const diff = (dE - dS) / 60000;
+                    totalMins += diff;
+                    durStr = `${Math.floor(diff/60)}:${String(Math.round(diff%60)).padStart(2,'0')}`;
+                    timeEnd = dE.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                }
+
+                body.push([
+                    dS.toLocaleDateString(),
+                    s.type,
+                    dS.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
+                    timeEnd,
+                    { text: durStr, alignment: 'right' }
+                ]);
+            });
+
+            // Summenzeile
+            const h = Math.floor(totalMins/60);
+            const m = Math.round(totalMins%60);
+            
+            body.push([
+                { text: 'GESAMT', colSpan: 4, bold: true, alignment: 'right' }, {}, {}, {},
+                { text: `${h}:${String(m).padStart(2,'0')}h`, bold: true, alignment: 'right' }
+            ]);
+
+            const docDefinition = {
+                content: [
+                    { text: name, style: 'headerTop' },
+                    { text: address, style: 'headerAddress', margin: [0, 2, 0, 20] }, 
+                    
+                    { text: 'Stundennachweis', style: 'title' },
+                    { text: `Zeitraum: ${rangeStr}`, style: 'subtitle' },
+                    { text: '\n' },
+                    {
+                        table: {
+                            headerRows: 1,
+                            widths: ['auto', '*', 'auto', 'auto', 'auto'],
+                            body: body
+                        },
+                        layout: 'lightHorizontalLines'
+                    },
+                    { text: '\n\n\n' },
+                    { text: 'Mit freundlichen Grüßen,', style: 'footerText' },
+                    { text: '\n__________________________', style: 'line' },
+                    { text: 'Unterschrift', style: 'footerSmall' }
+                ],
+                styles: {
+                    headerTop: { fontSize: 16, bold: true },
+                    headerAddress: { fontSize: 11, color: '#555' },
+                    title: { fontSize: 18, bold: true, decoration: 'underline' },
+                    subtitle: { fontSize: 12, italics: true, margin: [0, 5, 0, 0] },
+                    footerText: { fontSize: 11 },
+                    footerSmall: { fontSize: 9, italics: true, margin: [0, 5
