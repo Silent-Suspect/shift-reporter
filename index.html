@@ -9,185 +9,120 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
     
     <style>
-        :root { 
-            --bg: #121212; 
-            --card: #1e1e1e; 
-            --text: #fff; 
-            --accent: #3498db; 
-            --border: #333; 
-            --success: #2ecc71;
-        }
-        body { 
-            background: var(--bg); 
-            color: var(--text); 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            padding: 20px; 
-            max-width: 800px; 
-            margin: 0 auto; 
-        }
+        :root { --bg: #121212; --card: #1e1e1e; --text: #fff; --accent: #3498db; --border: #333; --success: #2ecc71; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
         h1, h3 { margin-top: 0; }
         .hidden { display: none !important; }
         
-        /* Karten-Look */
-        .card { 
-            background: var(--card); 
-            padding: 20px; 
-            border-radius: 12px; 
-            border: 1px solid var(--border); 
-            margin-bottom: 20px; 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
-        }
+        .card { background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
         
-        /* Inputs & Buttons */
-        input, button { 
-            width: 100%; 
-            padding: 12px; 
-            margin-top: 5px; 
-            border-radius: 8px; 
-            border: 1px solid #444; 
-            font-size: 1rem; 
-            box-sizing: border-box; 
-        }
+        input, button { width: 100%; padding: 12px; margin-top: 5px; border-radius: 8px; border: 1px solid #444; font-size: 1rem; box-sizing: border-box; }
         input { background: #000; color: white; }
         
-        button { 
-            cursor: pointer; 
-            font-weight: bold; 
-            border: none; 
-            transition: transform 0.1s, opacity 0.2s; 
-        }
+        button { cursor: pointer; font-weight: bold; border: none; transition: transform 0.1s; }
         button:active { transform: scale(0.98); }
         
         .btn-primary { background: var(--accent); color: white; }
         .btn-success { background: var(--success); color: white; }
         
-        /* Layout */
-        .row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
         .col { flex: 1; min-width: 140px; }
         
-        /* Tabelle */
         .table-wrap { overflow-x: auto; margin-top: 15px; border-radius: 8px; border: 1px solid #333; }
         table { width: 100%; border-collapse: collapse; min-width: 500px; }
         th, td { padding: 12px; border-bottom: 1px solid #333; text-align: left; font-size: 0.9rem; }
         th { background: #252525; color: #aaa; text-transform: uppercase; font-size: 0.8rem; }
-        tr:last-child td { border-bottom: none; }
         
-        /* Loading State */
+        /* Passwort Feld klein */
+        .pw-container { margin-bottom: 20px; text-align: right; }
+        #api-pw { width: auto; display: inline-block; padding: 8px; font-size: 0.8rem; border-color: #333; color: #aaa; }
+        
         .loading { opacity: 0.6; pointer-events: none; cursor: wait; }
     </style>
 </head>
 <body>
 
-    <header style="text-align:center; margin-bottom:20px;">
-        <h1>📄 Zeitzettel Generator</h1>
+    <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h1 style="margin:0; font-size:1.5rem;">📄 Zeitzettel</h1>
+        <input type="password" id="api-pw" placeholder="Code..." style="width:80px; padding:5px; font-size:0.8rem; border:1px solid #333; background:transparent;">
     </header>
 
-    <div id="step-login" class="card">
-        <h3>🔐 Login</h3>
-        <p style="color:#aaa; font-size:0.9rem;">Bitte Zugangscode für die Datenbank eingeben.</p>
-        <input type="password" id="api-pw" placeholder="Code eingeben...">
-        <button id="btn-login" class="btn-primary" style="margin-top:15px;">Verbinden</button>
+    <div class="card">
+        <h3>📅 Zeitraum</h3>
+        <div class="row">
+            <div class="col">
+                <label style="font-size:0.8rem; color:#aaa">Von:</label>
+                <input type="date" id="date-start">
+            </div>
+            <div class="col">
+                <label style="font-size:0.8rem; color:#aaa">Bis:</label>
+                <input type="date" id="date-end">
+            </div>
+        </div>
+        <button id="btn-load" class="btn-primary" style="margin-top:15px;">Daten laden</button>
     </div>
 
-    <div id="step-app" class="hidden">
+    <div id="preview-section" class="card hidden">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3>Vorschau</h3>
+            <span id="total-hours" style="font-size:1.2rem; font-weight:bold; color:var(--success);">0h 00m</span>
+        </div>
         
-        <div class="card">
-            <h3>📅 Zeitraum wählen</h3>
-            <div class="row">
-                <div class="col">
-                    <label style="font-size:0.8rem; color:#aaa">Von:</label>
-                    <input type="date" id="date-start">
-                </div>
-                <div class="col">
-                    <label style="font-size:0.8rem; color:#aaa">Bis:</label>
-                    <input type="date" id="date-end">
-                </div>
-            </div>
-            <button id="btn-load" class="btn-primary" style="margin-top:15px;">Laden & Vorschau</button>
+        <div class="table-wrap">
+            <table id="shift-table">
+                <thead>
+                    <tr><th>Datum</th><th>Typ</th><th>Start</th><th>Ende</th><th>Dauer</th></tr>
+                </thead>
+                <tbody id="table-body"></tbody>
+            </table>
         </div>
 
-        <div id="preview-section" class="card hidden">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h3>Vorschau</h3>
-                <span id="total-hours" style="font-size:1.2rem; font-weight:bold; color:var(--success);">0h 00m</span>
-            </div>
-            
-            <div class="table-wrap">
-                <table id="shift-table">
-                    <thead>
-                        <tr><th>Datum</th><th>Typ</th><th>Start</th><th>Ende</th><th>Dauer</th></tr>
-                    </thead>
-                    <tbody id="table-body"></tbody>
-                </table>
-            </div>
-
-            <div style="margin-top:20px; border-top:1px solid #333; padding-top:20px;">
-                <label style="font-size:0.8rem; color:#aaa">Name des Mitarbeiters:</label>
-                <input type="text" id="employee-name" value="Max Mustermann">
-                
-                <label style="font-size:0.8rem; color:#aaa; margin-top:10px; display:block;">Anschrift / Details:</label>
-                <input type="text" id="employee-address" value="Musterstraße 1, 12345 Musterstadt">
-
-                <button id="btn-pdf" class="btn-success" style="margin-top:20px;">🖨️ PDF Erstellen</button>
-            </div>
+        <div style="margin-top:20px; border-top:1px solid #333; padding-top:15px;">
+            <p style="color:#aaa; font-size:0.9rem; margin-bottom:10px;">
+                Erstelle Report für: <b id="display-name" style="color:white;">...</b>
+            </p>
+            <button id="btn-pdf" class="btn-success">🖨️ PDF Erstellen</button>
         </div>
     </div>
 
     <script>
-        // --- KONFIGURATION ---
         const API_URL = "https://script.google.com/macros/s/AKfycbxpMRFvRHGDeDGLtKu6Q8lHAXnd75Mq4Je3gpZTY30dyIUFBhUq7ecqs7yjp7Qw3iVM/exec"; 
-        // ---------------------
-
+        
         let filteredShifts = [];
+        let metaData = { name: "Unbekannt", address: "" };
 
-        // Init Dates (Aktueller Monat als Standard)
+        // Init: Passwort laden
+        const storedPW = localStorage.getItem('reporter_pw');
+        if(storedPW) document.getElementById('api-pw').value = storedPW;
+
+        // Init: Dates
         const now = new Date();
         document.getElementById('date-start').valueAsDate = new Date(now.getFullYear(), now.getMonth(), 1);
         document.getElementById('date-end').valueAsDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
-        // --- EVENT LISTENER ---
-
-        // Login Button (Speichert PW temporär und wechselt Ansicht)
-        document.getElementById('btn-login').addEventListener('click', () => {
-            const pw = document.getElementById('api-pw').value;
-            if(!pw) return alert("Bitte Code eingeben.");
-            
-            // Passwort temporär im RAM speichern für API Calls
-            window.apiPassword = pw;
-            
-            document.getElementById('step-login').classList.add('hidden');
-            document.getElementById('step-app').classList.remove('hidden');
-            
-            // Optional: Direkt laden triggern
-            filterAndRender();
-        });
-
-        // Laden Button
-        document.getElementById('btn-load').addEventListener('click', filterAndRender);
-
-        // PDF Button
-        document.getElementById('btn-pdf').addEventListener('click', generatePDF);
-
-
         // --- LOGIC ---
 
-        async function filterAndRender() {
+        document.getElementById('btn-load').addEventListener('click', async () => {
             const btn = document.getElementById('btn-load');
-            const startVal = document.getElementById('date-start').value;
-            const endVal = document.getElementById('date-end').value;
-            const pw = window.apiPassword; // Aus RAM lesen
+            const pwInp = document.getElementById('api-pw');
+            const pw = pwInp.value.trim();
 
             if(!pw) {
-                alert("Sitzung abgelaufen. Bitte neu laden.");
-                location.reload();
+                alert("Bitte Zugangscode oben rechts eingeben.");
+                pwInp.focus();
                 return;
             }
 
-            btn.innerText = "Lade Daten...";
+            // Passwort speichern
+            localStorage.setItem('reporter_pw', pw);
+
+            btn.innerText = "Lade...";
             btn.classList.add('loading');
 
+            const startVal = document.getElementById('date-start').value;
+            const endVal = document.getElementById('date-end').value;
+
             try {
-                // Wir senden den Filter an den Server für maximale Performance
                 const res = await fetch(API_URL, {
                     method: "POST",
                     body: JSON.stringify({ 
@@ -200,25 +135,25 @@
 
                 if (json.result === "success") {
                     filteredShifts = json.data;
+                    metaData = json.meta || { name: "", address: "" }; // Settings speichern
                     
-                    // Client-seitige Sortierung (älteste zuerst)
+                    // UI Update
+                    document.getElementById('display-name').innerText = metaData.name || "Kein Name in Settings";
+                    
                     filteredShifts.sort((a,b) => new Date(a.start) - new Date(b.start));
-                    
                     renderTable();
                     document.getElementById('preview-section').classList.remove('hidden');
-                    
-                    if(json.serverTimeMs) console.log(`Server benötigte: ${json.serverTimeMs}ms`);
                 } else {
-                    alert("Server-Meldung: " + json.message);
+                    alert("Server-Fehler: " + json.message);
                 }
             } catch (e) {
                 console.error(e);
-                alert("Verbindungsfehler. Prüfen Sie Ihre Internetverbindung.");
+                alert("Verbindungsfehler.");
             } finally {
-                btn.innerText = "Laden & Vorschau";
+                btn.innerText = "Daten laden";
                 btn.classList.remove('loading');
             }
-        }
+        });
 
         function renderTable() {
             const tbody = document.getElementById('table-body');
@@ -226,23 +161,21 @@
             let totalMins = 0;
 
             if(filteredShifts.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#aaa;">Keine Daten in diesem Zeitraum gefunden.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#aaa;">Keine Daten.</td></tr>';
                 document.getElementById('total-hours').innerText = "0h 00m";
                 return;
             }
 
             filteredShifts.forEach(s => {
                 const dStart = new Date(s.start);
-                // Falls das End-Datum fehlt (Laufende Schicht), nehmen wir Startdatum als Platzhalter oder brechen ab
                 const dEnd = s.end ? new Date(s.end) : null;
                 
                 let durStr = "-";
                 let timeEndStr = "Läuft...";
 
                 if (dEnd) {
-                    const diff = (dEnd - dStart) / 60000; // Minuten
+                    const diff = (dEnd - dStart) / 60000;
                     totalMins += diff;
-
                     const h = Math.floor(diff / 60);
                     const m = Math.round(diff % 60);
                     durStr = `${h}:${String(m).padStart(2,'0')}h`;
@@ -265,18 +198,16 @@
             document.getElementById('total-hours').innerText = `${totalH}h ${String(totalM).padStart(2,'0')}m`;
         }
 
-        function generatePDF() {
-            if(filteredShifts.length === 0) return alert("Leerer Report kann nicht gedruckt werden.");
+        document.getElementById('btn-pdf').addEventListener('click', () => {
+            if(filteredShifts.length === 0) return alert("Leer.");
 
-            const name = document.getElementById('employee-name').value;
-            const address = document.getElementById('employee-address').value;
+            const name = metaData.name || "Mitarbeiter";
+            const address = metaData.address || "";
             const sDate = new Date(document.getElementById('date-start').value);
             const eDate = new Date(document.getElementById('date-end').value);
             const range = `${sDate.toLocaleDateString()} - ${eDate.toLocaleDateString()}`;
 
-            // PDF Body bauen
             const body = [
-                // Header Row
                 [
                     { text: 'Datum', bold: true, fillColor: '#eeeeee' },
                     { text: 'Tätigkeit', bold: true, fillColor: '#eeeeee' },
@@ -310,16 +241,14 @@
                 ]);
             });
 
-            // Summenzeile
-            const totalH = Math.floor(totalMins / 60);
-            const totalM = Math.round(totalMins % 60);
+            const h = Math.floor(totalMins/60);
+            const m = Math.round(totalMins%60);
             
             body.push([
                 { text: 'GESAMT', colSpan: 4, bold: true, alignment: 'right' }, {}, {}, {},
-                { text: `${totalH}:${String(totalM).padStart(2,'0')}h`, bold: true, alignment: 'right' }
+                { text: `${h}:${String(m).padStart(2,'0')}h`, bold: true, alignment: 'right' }
             ]);
 
-            // PDF Definition
             const docDefinition = {
                 content: [
                     { text: name, style: 'headerTop' },
@@ -353,7 +282,7 @@
             };
 
             pdfMake.createPdf(docDefinition).download(`Stundenzettel_${name}.pdf`);
-        }
+        });
     </script>
 </body>
 </html>
