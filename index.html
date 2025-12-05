@@ -5,50 +5,86 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zeitzettel Generator</title>
     
-    <script>
-        window.onerror = function(msg, url, line) {
-            alert("⚠️ SYSTEM-FEHLER:\n" + msg + "\n\nZeile: " + line);
-            return false;
-        };
-    </script>
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
     
     <style>
-        :root { --bg: #121212; --card: #1e1e1e; --text: #fff; --accent: #3498db; --border: #333; --success: #2ecc71; }
-        body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        :root { 
+            --bg: #121212; 
+            --card: #1e1e1e; 
+            --text: #fff; 
+            --accent: #3498db; 
+            --border: #333; 
+            --success: #2ecc71; 
+        }
+        body { 
+            background: var(--bg); 
+            color: var(--text); 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            padding: 20px; 
+            max-width: 800px; 
+            margin: 0 auto; 
+        }
         h1, h3 { margin-top: 0; }
         .hidden { display: none !important; }
         
-        .card { background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        /* Karten-Look */
+        .card { 
+            background: var(--card); 
+            padding: 20px; 
+            border-radius: 12px; 
+            border: 1px solid var(--border); 
+            margin-bottom: 20px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
+        }
         
-        input, button { width: 100%; padding: 12px; margin-top: 5px; border-radius: 8px; border: 1px solid #444; font-size: 1rem; box-sizing: border-box; }
+        /* Inputs & Buttons */
+        input, button { 
+            width: 100%; 
+            padding: 12px; 
+            margin-top: 5px; 
+            border-radius: 8px; 
+            border: 1px solid #444; 
+            font-size: 1rem; 
+            box-sizing: border-box; 
+        }
         input { background: #000; color: white; }
         
-        button { cursor: pointer; font-weight: bold; border: none; transition: transform 0.1s; }
+        button { 
+            cursor: pointer; 
+            font-weight: bold; 
+            border: none; 
+            transition: transform 0.1s; 
+        }
         button:active { transform: scale(0.98); }
         
         .btn-primary { background: var(--accent); color: white; }
         .btn-success { background: var(--success); color: white; }
         
+        /* Layout */
         .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
         .col { flex: 1; min-width: 140px; }
         
+        /* Header */
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        #api-pw { width: 100px; padding: 8px; font-size: 0.8rem; border-color: #333; color: #aaa; background: transparent; text-align: center; }
+        
+        /* Tabelle */
         .table-wrap { overflow-x: auto; margin-top: 15px; border-radius: 8px; border: 1px solid #333; }
         table { width: 100%; border-collapse: collapse; min-width: 500px; }
         th, td { padding: 12px; border-bottom: 1px solid #333; text-align: left; font-size: 0.9rem; }
         th { background: #252525; color: #aaa; text-transform: uppercase; font-size: 0.8rem; }
         tr:last-child td { border-bottom: none; }
         
+        /* Loading */
         .loading { opacity: 0.6; pointer-events: none; cursor: wait; }
     </style>
 </head>
 <body>
 
-    <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+    <header>
         <h1 style="margin:0; font-size:1.5rem;">📄 Zeitzettel</h1>
-        <input type="password" id="api-pw" placeholder="Code..." style="width:80px; padding:5px; background:transparent; border:1px solid #333; text-align:center; color:#aaa;">
+        <input type="password" id="api-pw" placeholder="Code...">
     </header>
 
     <div class="card">
@@ -97,18 +133,13 @@
         let filteredShifts = [];
         let metaData = { name: "Mitarbeiter", address: "" };
 
-        // Bibliotheken-Check beim Start
-        if (typeof pdfMake === 'undefined') {
-            alert("ACHTUNG: PDF-Bibliothek konnte nicht geladen werden. Bitte Adblocker prüfen oder Internetverbindung checken.");
-        }
-
-        // Init: Passwort aus LocalStorage laden
+        // Init: Passwort laden
         try {
             const storedPW = localStorage.getItem('reporter_pw');
             if(storedPW) document.getElementById('api-pw').value = storedPW;
-        } catch(e) { console.warn("LocalStorage Fehler:", e); }
+        } catch(e) {}
 
-        // Init: Datumsfelder
+        // Init: Dates
         const now = new Date();
         document.getElementById('date-start').valueAsDate = new Date(now.getFullYear(), now.getMonth(), 1);
         document.getElementById('date-end').valueAsDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -116,8 +147,6 @@
         // --- LOGIC ---
 
         document.getElementById('btn-load').addEventListener('click', async () => {
-            console.log("Button geklickt..."); // Debug Lebenszeichen
-            
             const btn = document.getElementById('btn-load');
             const pwInp = document.getElementById('api-pw');
             const pw = pwInp.value.trim();
@@ -137,7 +166,6 @@
             const endVal = document.getElementById('date-end').value;
 
             try {
-                console.log("Sende Request an Google...");
                 const res = await fetch(API_URL, {
                     method: "POST",
                     body: JSON.stringify({ 
@@ -146,26 +174,23 @@
                         endDate: endVal
                     })
                 });
-                
-                console.log("Antwort erhalten. Parse JSON...");
                 const json = await res.json();
 
                 if (json.result === "success") {
-                    console.log("Daten erfolgreich geladen:", json.data.length);
                     filteredShifts = json.data;
                     metaData = json.meta || { name: "", address: "" }; 
                     
-                    document.getElementById('display-name').innerText = metaData.name || "(Kein Name hinterlegt)";
-                    document.getElementById('display-address').innerText = metaData.address || "(Keine Adresse hinterlegt)";
+                    document.getElementById('display-name').innerText = metaData.name || "(Kein Name)";
+                    document.getElementById('display-address').innerText = metaData.address || "(Keine Adresse)";
                     
                     filteredShifts.sort((a,b) => new Date(a.start) - new Date(b.start));
                     renderTable();
                     document.getElementById('preview-section').classList.remove('hidden');
                 } else {
-                    alert("Server-Fehler: " + json.message);
+                    alert("Server-Meldung: " + json.message);
                 }
             } catch (e) {
-                console.error("Fetch Fehler:", e);
+                console.error(e);
                 alert("Verbindungsfehler: " + e.message);
             } finally {
                 btn.innerText = "Daten laden";
@@ -179,7 +204,7 @@
             let totalMins = 0;
 
             if(filteredShifts.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#aaa;">Keine Daten in diesem Zeitraum.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#aaa;">Keine Daten.</td></tr>';
                 document.getElementById('total-hours').innerText = "0h 00m";
                 return;
             }
@@ -305,8 +330,7 @@
 
                 pdfMake.createPdf(docDefinition).download(fileName);
             } catch(e) {
-                alert("Fehler beim Erstellen des PDFs: " + e.message);
-                console.error(e);
+                alert("PDF Fehler: " + e.message);
             }
         });
     </script>
